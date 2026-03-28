@@ -24,7 +24,13 @@ export function useMultiplayer() {
   const [resultModal, setResultModal] = useState<MatchModalState | null>(null);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:3001', { autoConnect: false });
+    const socketUrl =
+      import.meta.env.VITE_SOCKET_URL?.trim() ||
+      (import.meta.env.DEV
+        ? `${window.location.protocol}//${window.location.hostname}:3001`
+        : window.location.origin);
+
+    const newSocket = io(socketUrl, { autoConnect: false });
     setSocket(newSocket);
 
     return () => {
