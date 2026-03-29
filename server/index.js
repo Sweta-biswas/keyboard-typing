@@ -81,10 +81,19 @@ const PASSAGES = {
 };
 
 function canPlayersMatch(a, b) {
-  return Boolean(a && b);
+  if (!a || !b) return false;
+  return a.preference === b.preference;
 }
 
-function resolveMatchMode() {
+function resolveMatchMode(first, second) {
+  if (first?.preference === MATCH_MODES.CODING && second?.preference === MATCH_MODES.CODING) {
+    return MATCH_MODES.CODING;
+  }
+
+  if (first?.preference === MATCH_MODES.NORMAL && second?.preference === MATCH_MODES.NORMAL) {
+    return MATCH_MODES.NORMAL;
+  }
+
   return randomFrom([MATCH_MODES.NORMAL, MATCH_MODES.CODING]);
 }
 
@@ -119,7 +128,7 @@ io.on("connection", (socket) => {
       const [first, second] = pair;
       const p1 = first.socket;
       const p2 = second.socket;
-      const matchMode = resolveMatchMode();
+      const matchMode = resolveMatchMode(first, second);
       const matchDuration = randomFrom(TIMER_OPTIONS);
       const matchDifficulty = randomFrom(DIFFICULTY_OPTIONS);
 

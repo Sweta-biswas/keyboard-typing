@@ -373,12 +373,21 @@ const App: React.FC = () => {
   const nextChar = passage[currentIndex] ?? '';
   const totalDuration = selectedDuration ?? 0;
   const myProgress = passage.length > 0 ? stats.correct / passage.length : 0;
+  const isMatchSettingsSynced =
+    !isMultiplayer ||
+    (
+      (!mp.matchMode || mode === mp.matchMode) &&
+      (!mp.matchDifficulty || difficulty === mp.matchDifficulty) &&
+      (!mp.matchDuration || selectedDuration === mp.matchDuration)
+    );
 
   useEffect(() => {
-    if (!isMultiplayer) return;
-    if (mp.status === 'found' && mp.passage) setExternalPassage(mp.passage);
+    if (!isMultiplayer || !isMatchSettingsSynced) return;
+    if ((mp.status === 'found' || mp.status === 'playing') && mp.passage) {
+      setExternalPassage(mp.passage);
+    }
     if (mp.status === 'playing') forceStart();
-  }, [isMultiplayer, mp.status, mp.passage, forceStart, setExternalPassage]);
+  }, [isMultiplayer, isMatchSettingsSynced, mp.status, mp.passage, forceStart, setExternalPassage]);
 
   useEffect(() => {
     if (isMultiplayer && mp.matchMode && mode !== mp.matchMode) {
