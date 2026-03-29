@@ -11,6 +11,7 @@ import StatsDisplay from './components/StatsDisplay';
 import Timer from './components/Timer';
 import MultiplayerPanel from './components/MultiplayerPanel';
 import RaceResultModal from './components/RaceResultModal';
+import ExitRaceConfirmModal from './components/ExitRaceConfirmModal';
 //@ts-ignore
 import logo from './assets/logo.png';
 import { RotateCcw, Swords, Volume2, Volume1, VolumeX, Keyboard } from 'lucide-react';
@@ -324,6 +325,7 @@ const App: React.FC = () => {
   const [showKbd, setShowKbd] = useState(true);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState<TimerDuration>(60);
+  const [showExitRaceConfirm, setShowExitRaceConfirm] = useState(false);
 
   const mp = useMultiplayer();
   const isTypingDisabled = isMultiplayer && mp.status !== 'playing';
@@ -376,7 +378,13 @@ const App: React.FC = () => {
     if (!isMultiplayer) return;
     if (mp.status === 'found' && mp.passage) setExternalPassage(mp.passage);
     if (mp.status === 'playing') forceStart();
-  }, [isMultiplayer, mp.status, mp.passage]);
+  }, [isMultiplayer, mp.status, mp.passage, forceStart, setExternalPassage]);
+
+  useEffect(() => {
+    if (isMultiplayer && mp.matchMode && mode !== mp.matchMode) {
+      setMode(mp.matchMode);
+    }
+  }, [isMultiplayer, mp.matchMode, mode]);
 
   useEffect(() => {
     if (isMultiplayer && isStarted && mp.status === 'playing') {
@@ -387,6 +395,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isMultiplayer && isFinished && mp.status === 'playing') mp.finishMatch();
   }, [isFinished]);
+
+  useEffect(() => {
+    if (mp.exitVersion > 0) {
+      setShowExitRaceConfirm(false);
+      resetTest();
+    }
+  }, [mp.exitVersion, resetTest]);
 
   const handleReset = useCallback(() => {
     if (soundStyle !== 'none') playClick();
@@ -403,21 +418,32 @@ const App: React.FC = () => {
   };
 
   const showTyping = !isFinished && (!isMultiplayer || mp.status === 'playing' || mp.status === 'found');
+  const requestExitRace = useCallback(() => {
+    if (isMultiplayer) {
+      setShowExitRaceConfirm(true);
+    }
+  }, [isMultiplayer]);
+
   const handleExitRace = useCallback(() => {
+    setShowExitRaceConfirm(false);
     mp.dismissResultModal();
     if (isMultiplayer) {
-      mp.cancelSearch();
-      setIsMultiplayer(false);
+      mp.exitRace();
     }
   }, [mp, isMultiplayer]);
 
   return (
     <>
       <GlobalStyle />
+      <ExitRaceConfirmModal
+        open={showExitRaceConfirm}
+        onCancel={() => setShowExitRaceConfirm(false)}
+        onConfirm={handleExitRace}
+      />
       <RaceResultModal
         result={mp.resultModal}
         onClose={mp.dismissResultModal}
-        onExit={handleExitRace}
+        onExit={requestExitRace}
       />
       <div
         className="noise-layer"
@@ -505,19 +531,21 @@ const App: React.FC = () => {
               />
             )}
 
-            <button
-              onClick={handleReset}
-              title="Restart (Tab)"
-              className="reset-btn"
-              style={{
-                padding: '8px 18px',
-                fontSize: '11px',
-                animation: 'none', // optional: disable pulse if too distracting
-              }}
-            >
-              <RotateCcw size={13} />
-              restart
-            </button>
+            {!isMultiplayer && (
+              <button
+                onClick={handleReset}
+                title="Restart (Tab)"
+                className="reset-btn"
+                style={{
+                  padding: '8px 18px',
+                  fontSize: '11px',
+                  animation: 'none', // optional: disable pulse if too distracting
+                }}
+              >
+                <RotateCcw size={13} />
+                restart
+              </button>
+            )}
           </div>
         </header>
 
@@ -547,7 +575,10 @@ const App: React.FC = () => {
                 socketId={mp.socketId}
                 onSearch={mp.searchMatch}
                 onCancel={mp.cancelSearch}
+                onExitRace={requestExitRace}
                 myProgress={myProgress}
+                matchPreference={mp.matchPreference}
+                onMatchPreferenceChange={mp.setMatchPreference}
               />
             </div>
           )}
@@ -556,12 +587,14 @@ const App: React.FC = () => {
           {isFinished && (
             <div className="fade-up" style={{ width: '100%', textAlign: 'center' }}>
               <StatsDisplay stats={stats} isFinished timeLeft={timeLeft} mode={mode} totalDuration={totalDuration} />
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 40 }}>
-                <button onClick={handleReset} className="reset-btn">
-                  <RotateCcw size={13} />
-                  new test
-                </button>
-              </div>
+              {!isMultiplayer && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 40 }}>
+                  <button onClick={handleReset} className="reset-btn">
+                    <RotateCcw size={13} />
+                    new test
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

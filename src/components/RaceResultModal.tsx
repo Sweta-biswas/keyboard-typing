@@ -12,12 +12,14 @@ const ICONS = {
   win: Trophy,
   loss: XCircle,
   disconnect: WifiOff,
+  opponent_exit: RotateCcw,
 } as const;
 
 const COLORS = {
   win: '#f5c451',
   loss: '#f16f7c',
   disconnect: '#7dd3fc',
+  opponent_exit: '#f5c451',
 } as const;
 
 const RaceResultModal: React.FC<RaceResultModalProps> = ({ result, onClose, onExit }) => {
@@ -53,6 +55,7 @@ const RaceResultModal: React.FC<RaceResultModalProps> = ({ result, onClose, onEx
 
   const Icon = ICONS[result.outcome];
   const accent = COLORS[result.outcome];
+  const showExitAction = result.outcome === 'win' || result.outcome === 'loss';
 
   return (
     <>
@@ -183,27 +186,29 @@ const RaceResultModal: React.FC<RaceResultModalProps> = ({ result, onClose, onEx
             >
               close
             </button>
-            <button
-              onClick={onExit}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '10px 18px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.05)',
-                color: 'var(--textPrimary)',
-                cursor: 'pointer',
-                fontFamily: "'DM Mono', monospace",
-                fontSize: 11,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}
-            >
-              <RotateCcw size={12} />
-              exit race
-            </button>
+            {showExitAction && (
+              <button
+                onClick={onExit}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '10px 18px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(255,255,255,0.05)',
+                  color: 'var(--textPrimary)',
+                  cursor: 'pointer',
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                <RotateCcw size={12} />
+                exit race
+              </button>
+            )}
           </div>
         </div>
       </div>

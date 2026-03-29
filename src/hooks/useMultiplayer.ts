@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { Mode } from '../data/snippets';
 
 export type MultiplayerStatus = 'idle' | 'searching' | 'found' | 'playing' | 'finished';
-export type MatchOutcome = 'win' | 'loss' | 'disconnect';
+export type MatchOutcome = 'win' | 'loss' | 'disconnect' | 'opponent_exit';
+export type MatchPreference = Mode | 'any';
 
 export interface Opponent {
   id: string;
@@ -22,6 +24,10 @@ export function useMultiplayer() {
   const [opponent, setOpponent] = useState<Opponent | null>(null);
   const [passage, setPassage] = useState<string>('');
   const [resultModal, setResultModal] = useState<MatchModalState | null>(null);
+  const [matchPreference, setMatchPreference] = useState<MatchPreference>('any');
+  const [matchMode, setMatchMode] = useState<Mode | null>(null);
+  const [exitVersion, setExitVersion] = useState(0);
+  const isLocalExitPendingRef = useRef(false);
 
   useEffect(() => {
     const socketUrl =
@@ -42,6 +48,7 @@ export function useMultiplayer() {
     setStatus(nextStatus);
     setOpponent(null);
     setPassage('');
+    setMatchMode(null);
   }, []);
 
   const showResultModal = useCallback((outcome: MatchOutcome) => {
@@ -52,23 +59,28 @@ export function useMultiplayer() {
           ? 'You Won'
           : outcome === 'loss'
             ? 'You Lost'
-            : 'Opponent Disconnected',
+            : outcome === 'opponent_exit'
+              ? 'Opponent Exited Race'
+              : 'Opponent Disconnected',
       message:
         outcome === 'win'
           ? 'You finished before your opponent.'
           : outcome === 'loss'
             ? 'Your opponent finished first this round.'
-            : 'The other player left the match. You can start a new race anytime.',
+            : outcome === 'opponent_exit'
+              ? 'Your opponent exited the race. The match has been ended and the timer was reset.'
+              : 'The other player left the match. You can start a new race anytime.',
     });
   }, []);
 
   const searchMatch = useCallback(() => {
     if (!socket) return;
 
+    isLocalExitPendingRef.current = false;
     setResultModal(null);
     socket.connect();
     setStatus('searching');
-    socket.emit('join_matchmaking');
+    socket.emit('join_matchmaking', { preference: matchPreference });
 
     socket.off('match_found');
     socket.off('match_start');
@@ -76,9 +88,11 @@ export function useMultiplayer() {
     socket.off('opponent_finished');
     socket.off('match_result');
     socket.off('opponent_disconnected');
+    socket.off('race_exited');
 
-    socket.on('match_found', (data: { id: string; players: Opponent[]; passage: string }) => {
+    socket.on('match_found', (data: { id: string; players: Opponent[]; passage: string; mode: Mode }) => {
       setPassage(data.passage);
+      setMatchMode(data.mode);
       const other = data.players.find(p => p.id !== socket.id);
       if (other) setOpponent(other);
       setStatus('found');
@@ -108,7 +122,20 @@ export function useMultiplayer() {
       showResultModal('disconnect');
       socket.disconnect();
     });
-  }, [socket, clearMatchState, showResultModal]);
+
+    socket.on('race_exited', (data: { reason: string; playerId: string }) => {
+      clearMatchState();
+      setExitVersion(prev => prev + 1);
+      const isLocalExit = isLocalExitPendingRef.current || data.playerId === socket.id;
+      isLocalExitPendingRef.current = false;
+
+      if (!isLocalExit) {
+        showResultModal('opponent_exit');
+      } else {
+        setResultModal(null);
+      }
+    });
+  }, [socket, clearMatchState, showResultModal, matchPreference]);
 
   const sendProgress = useCallback((progress: number, wpm: number, accuracy: number, currentIndex: number) => {
     if (socket && status === 'playing') {
@@ -129,6 +156,15 @@ export function useMultiplayer() {
     showResultModal('win');
   }, [socket, showResultModal]);
 
+  const exitRace = useCallback(() => {
+    if (!socket) return;
+    isLocalExitPendingRef.current = true;
+    socket.emit('exit_race');
+    clearMatchState();
+    setResultModal(null);
+    setExitVersion(prev => prev + 1);
+  }, [socket, clearMatchState]);
+
   const dismissResultModal = useCallback(() => {
     setResultModal(null);
   }, []);
@@ -138,11 +174,16 @@ export function useMultiplayer() {
     opponent,
     passage,
     resultModal,
+    matchPreference,
+    matchMode,
+    setMatchPreference,
     searchMatch,
     cancelSearch,
     sendProgress,
     finishMatch,
+    exitRace,
     dismissResultModal,
-    socketId: socket?.id
+    socketId: socket?.id,
+    exitVersion
   };
 }

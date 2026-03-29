@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MultiplayerStatus, Opponent } from '../hooks/useMultiplayer';
+import { MatchPreference, MultiplayerStatus, Opponent } from '../hooks/useMultiplayer';
 import { Swords, RotateCcw, Trophy, Zap, User } from 'lucide-react';
 
 interface Props {
@@ -8,7 +8,10 @@ interface Props {
   socketId?: string;
   onSearch: () => void;
   onCancel: () => void;
+  onExitRace: () => void;
   myProgress: number;
+  matchPreference: MatchPreference;
+  onMatchPreferenceChange: (value: MatchPreference) => void;
 }
 
 const STYLES = `
@@ -24,28 +27,34 @@ const STYLES = `
     40% { transform: translateY(-3px); opacity: 1; }
   }
   @keyframes mpPing {
-    0%  { transform: scale(1);   opacity: 0.6; }
-    70% { transform: scale(2);   opacity: 0; }
-    100%{ transform: scale(2);   opacity: 0; }
+    0%  { transform: scale(1); opacity: 0.6; }
+    70% { transform: scale(2); opacity: 0; }
+    100% { transform: scale(2); opacity: 0; }
   }
   @keyframes mpCountPop {
     from { transform: scale(0.5); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
+    to   { transform: scale(1); opacity: 1; }
   }
-  .mp-wrap  { animation: mpIn 0.3s cubic-bezier(0.22,1,0.36,1) both; }
+  .mp-wrap { animation: mpIn 0.3s cubic-bezier(0.22,1,0.36,1) both; }
   .mp-blink { animation: mpBlink 1s step-end infinite; }
-  .mp-d1    { animation: mpBounce 1.1s ease-in-out infinite 0s; }
-  .mp-d2    { animation: mpBounce 1.1s ease-in-out infinite 0.18s; }
-  .mp-d3    { animation: mpBounce 1.1s ease-in-out infinite 0.36s; }
+  .mp-d1 { animation: mpBounce 1.1s ease-in-out infinite 0s; }
+  .mp-d2 { animation: mpBounce 1.1s ease-in-out infinite 0.18s; }
+  .mp-d3 { animation: mpBounce 1.1s ease-in-out infinite 0.36s; }
   .mp-count { animation: mpCountPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
-  .mp-cta:hover  { opacity: 1 !important; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(var(--accentRgb),0.4) !important; }
+  .mp-cta:hover { opacity: 1 !important; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(var(--accentRgb),0.4) !important; }
   .mp-ghost:hover { border-color: rgba(255,255,255,0.22) !important; color: rgba(255,255,255,0.65) !important; }
 `;
 
 const ACCENT = 'var(--accent)';
-const RIVAL  = '#e05c6a';
-const MONO   = "'DM Mono', monospace";
-const SANS   = "'Outfit', sans-serif";
+const RIVAL = '#e05c6a';
+const MONO = "'DM Mono', monospace";
+const SANS = "'Outfit', sans-serif";
+
+const PREFERENCE_OPTIONS: { id: MatchPreference; label: string }[] = [
+  { id: 'normal', label: 'normal' },
+  { id: 'coding', label: 'coding' },
+  { id: 'any', label: 'any' },
+];
 
 const Lbl: React.FC<{ c?: string; children: React.ReactNode }> = ({ c, children }) => (
   <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: c ?? 'rgba(255,255,255,0.28)' }}>
@@ -82,7 +91,7 @@ const shell: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '8px 14px',
+  padding: '10px 14px',
   borderRadius: 10,
   border: '1px solid rgba(255,255,255,0.07)',
   background: 'rgba(255,255,255,0.02)',
@@ -91,7 +100,51 @@ const shell: React.CSSProperties = {
   overflow: 'hidden',
 };
 
-const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearch, onCancel, myProgress }) => {
+const PreferenceSelector: React.FC<{
+  value: MatchPreference;
+  onChange: (value: MatchPreference) => void;
+  disabled?: boolean;
+}> = ({ value, onChange, disabled = false }) => (
+  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    {PREFERENCE_OPTIONS.map(option => {
+      const active = value === option.id;
+      return (
+        <button
+          key={option.id}
+          onClick={() => onChange(option.id)}
+          disabled={disabled}
+          style={{
+            padding: '5px 10px',
+            borderRadius: 999,
+            border: active ? '1px solid rgba(var(--accentRgb),0.4)' : '1px solid rgba(255,255,255,0.08)',
+            background: active ? 'rgba(var(--accentRgb),0.14)' : 'rgba(255,255,255,0.03)',
+            color: active ? ACCENT : 'var(--textMuted)',
+            cursor: disabled ? 'default' : 'pointer',
+            fontFamily: MONO,
+            fontSize: 9,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            opacity: disabled && !active ? 0.55 : 1,
+          }}
+        >
+          {option.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+const MultiplayerPanel: React.FC<Props> = ({
+  status,
+  opponent,
+  socketId,
+  onSearch,
+  onCancel,
+  onExitRace,
+  myProgress,
+  matchPreference,
+  onMatchPreferenceChange,
+}) => {
   const [countdown, setCountdown] = useState<number | null>(null);
   const countKey = useRef(0);
 
@@ -100,7 +153,10 @@ const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearc
       setCountdown(3);
       const iv = setInterval(() => {
         setCountdown(p => {
-          if (p !== null && p > 1) { countKey.current++; return p - 1; }
+          if (p !== null && p > 1) {
+            countKey.current++;
+            return p - 1;
+          }
           return null;
         });
       }, 1000);
@@ -109,62 +165,76 @@ const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearc
     setCountdown(null);
   }, [status]);
 
-  const myPct  = Math.min(100, myProgress * 100);
+  const myPct = Math.min(100, myProgress * 100);
   const oppPct = Math.min(100, (opponent?.progress ?? 0) * 100);
-  const leading    = myPct >= oppPct;
+  const leading = myPct >= oppPct;
   const isFinished = status === 'finished';
 
-  /* ── IDLE ── */
-  if (status === 'idle') return (
-    <div className="mp-wrap" style={shell}>
-      <style>{STYLES}</style>
-      <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(var(--accentRgb),0.1)', border: '1px solid rgba(var(--accentRgb),0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ACCENT, flexShrink: 0 }}>
-        <Swords size={13} />
-      </div>
-      <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 500, color: 'var(--textPrimary)', flex: 1 }}>Race a live opponent</span>
-      <button
-        onClick={onSearch}
-        className="mp-cta"
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 999, background: ACCENT, color: 'var(--accentText)', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, transition: 'all 0.15s ease', boxShadow: '0 3px 14px rgba(var(--accentRgb),0.3)' }}
-      >
-        <Zap size={11} /> find match
-      </button>
-    </div>
-  );
+  if (status === 'idle') {
+    return (
+      <div className="mp-wrap" style={{ ...shell, alignItems: 'stretch', flexDirection: 'column' }}>
+        <style>{STYLES}</style>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+          <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(var(--accentRgb),0.1)', border: '1px solid rgba(var(--accentRgb),0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ACCENT, flexShrink: 0 }}>
+            <Swords size={13} />
+          </div>
+          <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 500, color: 'var(--textPrimary)', flex: 1 }}>Race a live opponent</span>
+          <button
+            onClick={onSearch}
+            className="mp-cta"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 999, background: ACCENT, color: 'var(--accentText)', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, transition: 'all 0.15s ease', boxShadow: '0 3px 14px rgba(var(--accentRgb),0.3)' }}
+          >
+            <Zap size={11} /> find match
+          </button>
+        </div>
 
-  /* ── SEARCHING ── */
-  if (status === 'searching') return (
-    <div className="mp-wrap" style={shell}>
-      <style>{STYLES}</style>
-      <div style={{ position: 'relative', width: 24, height: 24, flexShrink: 0 }}>
-        {[0, 0.5].map(d => (
-          <div key={d} style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid var(--accent)', animation: `mpPing 1.8s ease-out ${d}s infinite` }} />
-        ))}
-        <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'rgba(var(--accentRgb),0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ACCENT }}>
-          <Swords size={9} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', width: '100%', flexWrap: 'wrap' }}>
+          <Lbl>race mode</Lbl>
+          <PreferenceSelector value={matchPreference} onChange={onMatchPreferenceChange} />
         </div>
       </div>
-      <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 500, color: 'var(--textPrimary)' }}>Searching</span>
-      <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-        {['mp-d1','mp-d2','mp-d3'].map(c => <div key={c} className={c} style={{ width: 3, height: 3, borderRadius: '50%', background: ACCENT }} />)}
-      </div>
-      <div style={{ flex: 1 }} />
-      <button
-        onClick={onCancel}
-        className="mp-ghost"
-        style={{ padding: '5px 14px', borderRadius: 999, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'all 0.15s', flexShrink: 0 }}
-      >
-        cancel
-      </button>
-    </div>
-  );
+    );
+  }
 
-  /* ── FOUND / PLAYING / FINISHED ── */
+  if (status === 'searching') {
+    return (
+      <div className="mp-wrap" style={{ ...shell, alignItems: 'stretch', flexDirection: 'column' }}>
+        <style>{STYLES}</style>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+          <div style={{ position: 'relative', width: 24, height: 24, flexShrink: 0 }}>
+            {[0, 0.5].map(d => (
+              <div key={d} style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid var(--accent)', animation: `mpPing 1.8s ease-out ${d}s infinite` }} />
+            ))}
+            <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'rgba(var(--accentRgb),0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ACCENT }}>
+              <Swords size={9} />
+            </div>
+          </div>
+          <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 500, color: 'var(--textPrimary)' }}>Searching</span>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+            {['mp-d1', 'mp-d2', 'mp-d3'].map(c => <div key={c} className={c} style={{ width: 3, height: 3, borderRadius: '50%', background: ACCENT }} />)}
+          </div>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={onCancel}
+            className="mp-ghost"
+            style={{ padding: '5px 14px', borderRadius: 999, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'all 0.15s', flexShrink: 0 }}
+          >
+            cancel
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', width: '100%', flexWrap: 'wrap' }}>
+          <Lbl>matching</Lbl>
+          <PreferenceSelector value={matchPreference} onChange={onMatchPreferenceChange} disabled />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mp-wrap" style={{ ...shell, gap: 10 }}>
       <style>{STYLES}</style>
 
-      {/* Countdown overlay */}
       {status === 'found' && countdown !== null && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: 'rgba(8,8,12,0.9)', backdropFilter: 'blur(8px)', borderRadius: 10 }}>
           <Lbl>starts in</Lbl>
@@ -174,7 +244,6 @@ const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearc
         </div>
       )}
 
-      {/* YOU */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
         <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(var(--accentRgb),0.1)', border: '1px solid rgba(var(--accentRgb),0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ACCENT }}>
           <User size={11} />
@@ -184,21 +253,17 @@ const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearc
         </span>
       </div>
 
-      {/* YOUR bar */}
       <MiniBar pct={myPct} color={ACCENT} />
 
-      {/* Centre: vs + lead */}
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, width: 36 }}>
         <span style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.1em' }}>vs</span>
         <span style={{ fontFamily: MONO, fontSize: 7, letterSpacing: '0.06em', textTransform: 'uppercase', color: leading ? ACCENT : RIVAL, transition: 'color 0.4s', opacity: 0.65 }}>
-          {leading ? '▲ you' : '▼ rival'}
+          {leading ? 'you' : 'rival'}
         </span>
       </div>
 
-      {/* RIVAL bar */}
       <MiniBar pct={oppPct} color={RIVAL} />
 
-      {/* RIVAL */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
         <span style={{ fontFamily: MONO, fontSize: 12, color: RIVAL, fontWeight: 500, minWidth: 28, textAlign: 'right' }}>
           {Math.round(oppPct)}<span style={{ fontSize: 8, opacity: 0.55 }}>%</span>
@@ -213,10 +278,8 @@ const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearc
         </div>
       </div>
 
-      {/* Divider */}
       <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
 
-      {/* Status */}
       {isFinished ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 999, background: myPct >= oppPct ? 'rgba(255,215,0,0.08)' : 'rgba(255,255,255,0.04)', border: `1px solid ${myPct >= oppPct ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.07)'}`, color: myPct >= oppPct ? '#ffd700' : 'rgba(255,255,255,0.3)', fontFamily: MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
@@ -232,9 +295,18 @@ const MultiplayerPanel: React.FC<Props> = ({ status, opponent, socketId, onSearc
           </button>
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-          <div className="mp-blink" style={{ width: 5, height: 5, borderRadius: '50%', background: ACCENT }} />
-          <Lbl c={ACCENT}>live</Lbl>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div className="mp-blink" style={{ width: 5, height: 5, borderRadius: '50%', background: ACCENT }} />
+            <Lbl c={ACCENT}>live</Lbl>
+          </div>
+          <button
+            onClick={onExitRace}
+            className="mp-ghost"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'all 0.15s' }}
+          >
+            <RotateCcw size={9} /> exit race
+          </button>
         </div>
       )}
     </div>
