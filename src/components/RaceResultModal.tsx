@@ -11,6 +11,7 @@ interface RaceResultModalProps {
 const ICONS = {
   win: Trophy,
   loss: XCircle,
+  draw: RotateCcw,
   disconnect: WifiOff,
   opponent_exit: RotateCcw,
 } as const;
@@ -18,6 +19,7 @@ const ICONS = {
 const COLORS = {
   win: '#f5c451',
   loss: '#f16f7c',
+  draw: '#94a3b8',
   disconnect: '#7dd3fc',
   opponent_exit: '#f5c451',
 } as const;
@@ -55,7 +57,7 @@ const RaceResultModal: React.FC<RaceResultModalProps> = ({ result, onClose, onEx
 
   const Icon = ICONS[result.outcome];
   const accent = COLORS[result.outcome];
-  const showExitAction = result.outcome === 'win' || result.outcome === 'loss';
+  const showExitAction = result.outcome === 'win' || result.outcome === 'loss' || result.outcome === 'draw';
 
   return (
     <>

@@ -34,12 +34,24 @@ const MATCH_MODES = {
   ANY: "any",
 };
 
+const TIMER_OPTIONS = [30, 60, 90];
+const DIFFICULTY_OPTIONS = ["easy", "medium", "hard"];
+const DRAW_WINDOW_MS = 250;
+
+function randomFrom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 function cleanupRoom(roomId) {
   const roomData = rooms.get(roomId);
   if (!roomData) return;
 
   if (roomData.startTimeout) {
     clearTimeout(roomData.startTimeout);
+  }
+
+  if (roomData.resultTimeout) {
+    clearTimeout(roomData.resultTimeout);
   }
 
   roomData.players.forEach(player => {
@@ -69,23 +81,11 @@ const PASSAGES = {
 };
 
 function canPlayersMatch(a, b) {
-  return a.preference === b.preference;
+  return Boolean(a && b);
 }
 
-function resolveMatchMode(a, b) {
-  if (a.preference === b.preference && a.preference !== MATCH_MODES.ANY) {
-    return a.preference;
-  }
-
-  if (a.preference === MATCH_MODES.ANY && b.preference !== MATCH_MODES.ANY) {
-    return b.preference;
-  }
-
-  if (b.preference === MATCH_MODES.ANY && a.preference !== MATCH_MODES.ANY) {
-    return a.preference;
-  }
-
-  return Math.random() > 0.5 ? MATCH_MODES.NORMAL : MATCH_MODES.CODING;
+function resolveMatchMode() {
+  return randomFrom([MATCH_MODES.NORMAL, MATCH_MODES.CODING]);
 }
 
 function tryMatchPlayers() {
@@ -119,7 +119,9 @@ io.on("connection", (socket) => {
       const [first, second] = pair;
       const p1 = first.socket;
       const p2 = second.socket;
-      const matchMode = resolveMatchMode(first, second);
+      const matchMode = resolveMatchMode();
+      const matchDuration = randomFrom(TIMER_OPTIONS);
+      const matchDifficulty = randomFrom(DIFFICULTY_OPTIONS);
 
       const roomId = `room_${++roomCounter}`;
       p1.join(roomId);
@@ -131,6 +133,8 @@ io.on("connection", (socket) => {
       const roomData = {
         id: roomId,
         mode: matchMode,
+        duration: matchDuration,
+        difficulty: matchDifficulty,
         players: [
           { id: p1.id, progress: 0, wpm: 0, finishedAt: null },
           { id: p2.id, progress: 0, wpm: 0, finishedAt: null }
@@ -138,7 +142,8 @@ io.on("connection", (socket) => {
         passage,
         winnerId: null,
         finished: false,
-        startTimeout: null
+        startTimeout: null,
+        resultTimeout: null
       };
 
       rooms.set(roomId, roomData);
@@ -179,8 +184,6 @@ io.on("connection", (socket) => {
     const roomId = socket.data.roomId;
     if (!roomId) return;
 
-    socket.to(roomId).emit("opponent_finished", { id: socket.id });
-
     const roomData = rooms.get(roomId);
     if (!roomData || roomData.finished) return;
 
@@ -192,14 +195,36 @@ io.on("connection", (socket) => {
       player.finishedAt = Date.now();
     }
 
-    if (!roomData.winnerId) {
-      roomData.winnerId = socket.id;
+    socket.to(roomId).emit("opponent_finished", { id: socket.id });
+
+    if (opponent.finishedAt && Math.abs(player.finishedAt - opponent.finishedAt) <= DRAW_WINDOW_MS) {
+      if (roomData.resultTimeout) {
+        clearTimeout(roomData.resultTimeout);
+        roomData.resultTimeout = null;
+      }
+
       roomData.finished = true;
+      roomData.winnerId = null;
 
-      io.to(socket.id).emit("match_result", { outcome: "win", reason: "finished_first" });
-      io.to(opponent.id).emit("match_result", { outcome: "loss", reason: "opponent_finished_first" });
-
+      io.to(roomId).emit("match_result", { outcome: "draw", reason: "simultaneous_finish" });
       setTimeout(() => cleanupRoom(roomId), 1500);
+      return;
+    }
+
+    if (!roomData.resultTimeout) {
+      roomData.resultTimeout = setTimeout(() => {
+        const latestRoom = rooms.get(roomId);
+        if (!latestRoom || latestRoom.finished) return;
+
+        latestRoom.finished = true;
+        latestRoom.winnerId = socket.id;
+        latestRoom.resultTimeout = null;
+
+        io.to(socket.id).emit("match_result", { outcome: "win", reason: "finished_first" });
+        io.to(opponent.id).emit("match_result", { outcome: "loss", reason: "opponent_finished_first" });
+
+        setTimeout(() => cleanupRoom(roomId), 1500);
+      }, DRAW_WINDOW_MS);
     }
   });
 

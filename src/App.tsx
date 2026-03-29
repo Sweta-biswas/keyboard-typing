@@ -387,6 +387,18 @@ const App: React.FC = () => {
   }, [isMultiplayer, mp.matchMode, mode]);
 
   useEffect(() => {
+    if (isMultiplayer && mp.matchDifficulty && difficulty !== mp.matchDifficulty) {
+      setDifficulty(mp.matchDifficulty);
+    }
+  }, [isMultiplayer, mp.matchDifficulty, difficulty]);
+
+  useEffect(() => {
+    if (isMultiplayer && mp.matchDuration && selectedDuration !== mp.matchDuration) {
+      setSelectedDuration(mp.matchDuration);
+    }
+  }, [isMultiplayer, mp.matchDuration, selectedDuration]);
+
+  useEffect(() => {
     if (isMultiplayer && isStarted && mp.status === 'playing') {
       mp.sendProgress(myProgress, stats.wpm, stats.accuracy, currentIndex);
     }
@@ -418,6 +430,10 @@ const App: React.FC = () => {
   };
 
   const showTyping = !isFinished && (!isMultiplayer || mp.status === 'playing' || mp.status === 'found');
+  const areRaceSettingsLocked = isMultiplayer;
+  const lockedPillStyle = areRaceSettingsLocked
+    ? { opacity: 0.55, cursor: 'not-allowed' as const }
+    : undefined;
   const requestExitRace = useCallback(() => {
     if (isMultiplayer) {
       setShowExitRaceConfirm(true);
@@ -502,7 +518,7 @@ const App: React.FC = () => {
                 height: 34,
                 width: 34,
                 objectFit: 'contain',
-                filter: 'drop-shadow(0 0 10px rgba(0,198,255,0.5))',
+                filter: 'drop-shadow(0 0 14px rgba(255, 184, 77, 0.34))',
               }}
             />
 
@@ -512,9 +528,10 @@ const App: React.FC = () => {
                 fontWeight: 700,
                 fontSize: 16,
                 letterSpacing: '0.1em',
-                background: 'linear-gradient(90deg, #00c6ff, #8e2de2)',
+                background: 'linear-gradient(90deg, #fffdf8 0%, #ffd59a 52%, #ffb347 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
+                textShadow: '0 0 22px rgba(255, 179, 71, 0.18)',
               }}
             >
               KeyroX
@@ -656,22 +673,24 @@ const App: React.FC = () => {
                   scrollbarWidth: 'none',
                   paddingBottom: 2,
                 }}>
-                  <button className={`pill-btn ${mode === 'normal' ? 'active' : ''}`} onClick={() => setMode('normal')}>normal</button>
-                  <button className={`pill-btn ${mode === 'coding' ? 'active' : ''}`} onClick={() => setMode('coding')}>coding</button>
+                  <button className={`pill-btn ${mode === 'normal' ? 'active' : ''}`} onClick={() => setMode('normal')} disabled={areRaceSettingsLocked} style={lockedPillStyle}>normal</button>
+                  <button className={`pill-btn ${mode === 'coding' ? 'active' : ''}`} onClick={() => setMode('coding')} disabled={areRaceSettingsLocked} style={lockedPillStyle}>coding</button>
                   <div className="sep" />
                   {TIMER_OPTIONS.map(duration => (
                     <button
                       key={duration}
                       className={`pill-btn ${selectedDuration === duration ? 'active' : ''}`}
                       onClick={() => setSelectedDuration(duration)}
+                      disabled={areRaceSettingsLocked}
+                      style={lockedPillStyle}
                     >
                       {duration}s
                     </button>
                   ))}
                   <div className="sep" />
-                  <button className={`pill-btn ${difficulty === 'easy' ? 'active' : ''}`} onClick={() => setDifficulty('easy')}>easy</button>
-                  <button className={`pill-btn ${difficulty === 'medium' ? 'active' : ''}`} onClick={() => setDifficulty('medium')}>medium</button>
-                  <button className={`pill-btn ${difficulty === 'hard' ? 'active' : ''}`} onClick={() => setDifficulty('hard')}>hard</button>
+                  <button className={`pill-btn ${difficulty === 'easy' ? 'active' : ''}`} onClick={() => setDifficulty('easy')} disabled={areRaceSettingsLocked} style={lockedPillStyle}>easy</button>
+                  <button className={`pill-btn ${difficulty === 'medium' ? 'active' : ''}`} onClick={() => setDifficulty('medium')} disabled={areRaceSettingsLocked} style={lockedPillStyle}>medium</button>
+                  <button className={`pill-btn ${difficulty === 'hard' ? 'active' : ''}`} onClick={() => setDifficulty('hard')} disabled={areRaceSettingsLocked} style={lockedPillStyle}>hard</button>
                   <div className="sep" />
                   <button
                     className="pill-btn"

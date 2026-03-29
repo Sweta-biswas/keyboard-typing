@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Mode } from '../data/snippets';
+import { Difficulty, Mode, TimerDuration } from '../data/snippets';
 
 export type MultiplayerStatus = 'idle' | 'searching' | 'found' | 'playing' | 'finished';
-export type MatchOutcome = 'win' | 'loss' | 'disconnect' | 'opponent_exit';
+export type MatchOutcome = 'win' | 'loss' | 'draw' | 'disconnect' | 'opponent_exit';
 export type MatchPreference = Mode | 'any';
 
 export interface Opponent {
@@ -26,6 +26,8 @@ export function useMultiplayer() {
   const [resultModal, setResultModal] = useState<MatchModalState | null>(null);
   const [matchPreference, setMatchPreference] = useState<MatchPreference>('any');
   const [matchMode, setMatchMode] = useState<Mode | null>(null);
+  const [matchDuration, setMatchDuration] = useState<TimerDuration | null>(null);
+  const [matchDifficulty, setMatchDifficulty] = useState<Difficulty | null>(null);
   const [exitVersion, setExitVersion] = useState(0);
   const isLocalExitPendingRef = useRef(false);
 
@@ -49,6 +51,8 @@ export function useMultiplayer() {
     setOpponent(null);
     setPassage('');
     setMatchMode(null);
+    setMatchDuration(null);
+    setMatchDifficulty(null);
   }, []);
 
   const showResultModal = useCallback((outcome: MatchOutcome) => {
@@ -59,6 +63,8 @@ export function useMultiplayer() {
           ? 'You Won'
           : outcome === 'loss'
             ? 'You Lost'
+            : outcome === 'draw'
+              ? 'Draw'
             : outcome === 'opponent_exit'
               ? 'Opponent Exited Race'
               : 'Opponent Disconnected',
@@ -67,6 +73,8 @@ export function useMultiplayer() {
           ? 'You finished before your opponent.'
           : outcome === 'loss'
             ? 'Your opponent finished first this round.'
+            : outcome === 'draw'
+              ? 'Both players finished at nearly the same time. This race ends in a draw.'
             : outcome === 'opponent_exit'
               ? 'Your opponent exited the race. The match has been ended and the timer was reset.'
               : 'The other player left the match. You can start a new race anytime.',
@@ -90,9 +98,18 @@ export function useMultiplayer() {
     socket.off('opponent_disconnected');
     socket.off('race_exited');
 
-    socket.on('match_found', (data: { id: string; players: Opponent[]; passage: string; mode: Mode }) => {
+    socket.on('match_found', (data: {
+      id: string;
+      players: Opponent[];
+      passage: string;
+      mode: Mode;
+      duration: TimerDuration;
+      difficulty: Difficulty;
+    }) => {
       setPassage(data.passage);
       setMatchMode(data.mode);
+      setMatchDuration(data.duration);
+      setMatchDifficulty(data.difficulty);
       const other = data.players.find(p => p.id !== socket.id);
       if (other) setOpponent(other);
       setStatus('found');
@@ -108,11 +125,9 @@ export function useMultiplayer() {
 
     socket.on('opponent_finished', () => {
       setOpponent(prev => prev ? { ...prev, progress: 1 } : prev);
-      setStatus('finished');
-      showResultModal('loss');
     });
 
-    socket.on('match_result', (data: { outcome: 'win' | 'loss'; reason: string }) => {
+    socket.on('match_result', (data: { outcome: 'win' | 'loss' | 'draw'; reason: string }) => {
       setStatus('finished');
       showResultModal(data.outcome);
     });
@@ -176,6 +191,8 @@ export function useMultiplayer() {
     resultModal,
     matchPreference,
     matchMode,
+    matchDuration,
+    matchDifficulty,
     setMatchPreference,
     searchMatch,
     cancelSearch,

@@ -57,7 +57,7 @@ const normalHard: string[] = [
 // ── Coding mode text pools ──────────────────────────────────────────────────
 
 const codingEasy: string[] = [
-  'const name = "DevType"; console.log(name);',
+  'const name = "KeyroX"; console.log(name);',
   'let x = 10; let y = 20; console.log(x + y);',
   'function greet(name) { return "Hello " + name; }',
   'const arr = [1, 2, 3, 4, 5]; arr.forEach(n => console.log(n));',
